@@ -1,3 +1,6 @@
+// Вставь сюда URL, который ты скопировал на Шаге 1
+const GOOGLE_SHEET_APP_URL = "https://script.google.com/macros/s/AKfycbzSHLYYv7VVwBy1uPQnUHA_Rim9ac1Sz2BOfy5cW9wfm5L56ih19dk5VN9vFkCAgL8/exec";
+
 // --- КОНФИГУРАЦИЯ FIREBASE ---
 const firebaseConfig = {
     apiKey: "AIzaSyCtM3kS2F7P7m21Phx4QJenLIPbtgedRRw",
@@ -457,40 +460,51 @@ const closeEditor = () => {
 };
 
 const saveNote = async () => {
-    const title = document.getElementById('note-title').value.trim();
-    const text = document.getElementById('note-text').value.trim();
-    if (!title && !text) return closeEditor();
+    const title = document.getElementById('note-title').value.trim();
+    const text = document.getElementById('note-text').value.trim();
+    if (!title && !text) return closeEditor();
 
-    const data = {
-        title, text,
-        tags: document.getElementById('note-tags').value.split(' ').filter(t => t.trim()),
-        priority: document.getElementById('priority-label').dataset.priority || 'normal',
-        showTimestamp: document.getElementById('show-time').checked,
-        isPinned: state.editorPinned,
-        updatedAt: Date.now()
-    };
+    const data = {
+        title, text,
+        tags: document.getElementById('note-tags').value.split(' ').filter(t => t.trim()),
+        priority: document.getElementById('priority-label').dataset.priority || 'normal',
+        showTimestamp: document.getElementById('show-time').checked,
+        isPinned: state.editorPinned,
+        updatedAt: Date.now()
+    };
 
-    const folderSelect = document.getElementById('note-folder-select');
-    data.folderId = (folderSelect && folderSelect.value) ? folderSelect.value : null;
+    const folderSelect = document.getElementById('note-folder-select');
+    data.folderId = (folderSelect && folderSelect.value) ? folderSelect.value : null;
 
-    try {
-        if (state.editingId) {
-            await db.collection("notes").doc(state.editingId).update(data);
-        } else {
-            if (!state.user) { alert("Требуется авторизация"); return; }
-            data.uid = state.user.uid;
-            data.createdAt = Date.now();
-            data.isArchived = false;
-            await db.collection("notes").add(data);
-        }
-        closeEditor();
-    } catch (e) {
-        console.error("Ошибка сохранения заметки:", e);
-        const msg = (e && e.message && e.message.includes('Missing or insufficient permissions')) ?
-            i18n[state.config.lang].perm_error :
-            (e.message || String(e));
-        alert("Ошибка: " + msg);
-    }
+    // Получаем имя папки для красивой записи в таблицу
+    const folderName = data.folderId 
+        ? (state.folders.find(f => f.id === data.folderId)?.name || '') 
+        : '';
+
+    try {
+        if (state.editingId) {
+            await db.collection("notes").doc(state.editingId).update(data);
+        } else {
+            if (!state.user) { alert("Требуется авторизация"); return; }
+            data.uid = state.user.uid;
+            data.createdAt = Date.now();
+            data.isArchived = false;
+            await db.collection("notes").add(data);
+        }
+        
+        // --- ОТПРАВКА В GOOGLE ТАБЛИЦУ ---
+        // Отправляем копию данных, добавляя имя папки
+        sendToGoogleSheet({ ...data, folderName });
+        // ---------------------------------
+
+        closeEditor();
+    } catch (e) {
+        console.error("Ошибка сохранения заметки:", e);
+        const msg = (e && e.message && e.message.includes('Missing or insufficient permissions')) ?
+            i18n[state.config.lang].perm_error :
+            (e.message || String(e));
+        alert("Ошибка: " + msg);
+    }
 };
 
 const deleteNoteWrapper = async () => {
@@ -753,4 +767,22 @@ function registerGlobals() {
 function updateStats() {
     const countEl = document.getElementById('note-count');
     if (countEl) countEl.textContent = state.notes.length;
-} адаптируй этот код под задачу и пришли готовый
+} 
+async function sendToGoogleSheet(data) {
+    if (!GOOGLE_SHEET_APP_URL || GOOGLE_SHEET_APP_URL.includes(".......")) return;
+
+    try {
+        // mode: 'no-cors' важен, чтобы браузер не блокировал запрос к Google
+        await fetch(GOOGLE_SHEET_APP_URL, {
+            method: 'POST',
+            mode: 'no-cors', 
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        });
+        console.log("Заметка отправлена в Google Таблицу");
+    } catch (error) {
+        console.error("Ошибка отправки в таблицу:", error);
+    }
+}
