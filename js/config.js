@@ -4,7 +4,8 @@ const firebaseConfig = {
     projectId: "smartnotes-f5733",
     storageBucket: "smartnotes-f5733.firebasestorage.app",
     messagingSenderId: "523799066979",
-    appId: "1:523799066979:web:abc13814f34864230cbb56"
+    appId: "1:523799066979:web:abc13814f34864230cbb56",
+    clientId: "523799066979-e75bl0vvthlr5193qee8niocvkoqaknq.apps.googleusercontent.com"
 };
 
 if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
@@ -12,20 +13,15 @@ if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-// Включаем поддержку офлайн-режима
-db.enablePersistence()
-  .catch((err) => {
-    if (err.code == 'failed-precondition') {
-      // Вероятно, открыто много вкладок в браузере
-      console.warn('Офлайн режим не включен: открыто много вкладок');
-    } else if (err.code == 'unimplemented') {
-      // Браузер не поддерживает (редко)
-      console.warn('Офлайн режим не поддерживается вашим браузером');
-    }
-  });
+db.enablePersistence().catch((err) => {
+    if (err.code == 'failed-precondition') console.warn('Много вкладок: оффлайн режим ограничен');
+    else if (err.code == 'unimplemented') console.warn('Браузер не поддерживает оффлайн');
+});
 
 const provider = new firebase.auth.GoogleAuthProvider();
 provider.setCustomParameters({ prompt: 'select_account' });
+provider.addScope('https://www.googleapis.com/auth/drive.file');
+provider.addScope('https://www.googleapis.com/auth/calendar.events');
 
 let state = {
     user: null,
@@ -35,28 +31,28 @@ let state = {
     activeFolderId: null,
     searchQuery: '',
     currentNote: null,
-    tempRating: 0,
-    config: { lang: 'ru' }
+    isLoading: true,
+    isDrawing: false,
+    accessibility: localStorage.getItem('accessibility') === 'true',
+    config: { 
+        lang: localStorage.getItem('lang') || 'ru',
+        theme: localStorage.getItem('theme') || 'dark'
+    }
 };
 
 const LANG = {
     ru: {
-        slogan: "Ваши мысли. В порядке.", login_google: "Войти через Google", all_notes: "Все записи",
-        favorites: "Важное", archive: "Архив", folders: "ПАПКИ", about: "О нас", rate: "Оценить",
-        settings: "Настройки", switch_acc: "Сменить", logout: "Выйти", empty: "Здесь пока пусто",
-        general: "Общие", language: "Язык", appearance: "Внешний вид", presets: "Пресеты",
-        manual: "Ручная настройка", c_text: "Текст", c_accent: "Акцент", c_bg: "Фон",
-        reset: "Сбросить", close: "Закрыть", save: "Сохранить", team: "Команда",
-        contact_us: "Связаться с нами:", send: "Отправить", cancel: "Отмена", yes: "Да"
+        slogan: "SmartNotes", login_google: "Войти через Google", all_notes: "Все записи",
+        favorites: "Важное", archive: "Архив", trash: "Корзина", folders: "ПАПКИ",
+        settings: "Настройки", logout: "Выйти", empty: "Здесь пока пусто",
+        save: "Сохранить", sync: "Синхронизация", drawing: "Рисование",
+        history: "История версий", shared: "Общие", lock: "Защитить"
     },
     en: {
-        slogan: "Your thoughts. Organized.", login_google: "Sign in with Google", all_notes: "All Notes",
-        favorites: "Important", archive: "Archive", folders: "FOLDERS", about: "About", rate: "Rate Us",
-        settings: "Settings", switch_acc: "Switch", logout: "Logout", empty: "Nothing here yet",
-        general: "General", language: "Language", appearance: "Appearance", presets: "Presets",
-        manual: "Manual Config", c_text: "Text", c_accent: "Accent", c_bg: "Background",
-        reset: "Reset", close: "Close", save: "Save", team: "Team",
-        contact_us: "Contact us:", send: "Send", cancel: "Cancel", yes: "Yes"
+        slogan: "SmartNotes", login_google: "Sign in with Google", all_notes: "All Notes",
+        favorites: "Important", archive: "Archive", trash: "Trash", folders: "FOLDERS",
+        settings: "Settings", logout: "Logout", empty: "Nothing here yet",
+        save: "Save", sync: "Sync", drawing: "Drawing",
+        history: "History", shared: "Shared", lock: "Lock"
     }
 };
-
