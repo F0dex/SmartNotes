@@ -2,10 +2,42 @@ const Auth = {
     async login() {
         const provider = new firebase.auth.GoogleAuthProvider();
         provider.setCustomParameters({ prompt: 'select_account' });
+        
         try {
             await auth.signInWithPopup(provider);
         } catch (e) {
-            this.handleAuthError(e);
+            // === НАЧАЛО ИЗМЕНЕНИЙ: ЛОГИКА СВЯЗЫВАНИЯ АККАУНТОВ ===
+            if (e.code === 'auth/account-exists-with-different-credential') {
+                try {
+                    // 1. Сохраняем данные от Google, которые мы только что получили
+                    const pendingCred = e.credential;
+                    const email = e.email;
+
+                    // 2. Просим пользователя подтвердить, что это он, введя пароль
+                    // (В идеале здесь должно быть красивое модальное окно, но для простоты используем prompt)
+                    const password = prompt(`Почта ${email} уже зарегистрирована. Введите ваш пароль, чтобы привязать вход через Google:`);
+
+                    if (password) {
+                        // 3. Входим по старому методу (Email + Пароль)
+                        const userCredential = await auth.signInWithEmailAndPassword(email, password);
+                        
+                        // 4. ПРИВЯЗЫВАЕМ (Link) Google аккаунт к этому пользователю
+                        await userCredential.user.linkWithCredential(pendingCred);
+                        
+                        UI.showToast("Google аккаунт успешно привязан!");
+                        return; // Успех
+                    } else {
+                        UI.showToast("Привязка отменена пользователем");
+                    }
+                } catch (linkError) {
+                    // Если пароль неверный или другая ошибка при связывании
+                    this.handleAuthError(linkError);
+                }
+            } else {
+                // Если это любая другая ошибка - обрабатываем как обычно
+                this.handleAuthError(e);
+            }
+            // === КОНЕЦ ИЗМЕНЕНИЙ ===
         }
     },
 
@@ -14,6 +46,7 @@ const Auth = {
         try {
             await auth.signInWithPopup(provider);
         } catch (e) {
+            // Тут можно добавить такую же логику для GitHub, если нужно
             this.handleAuthError(e);
         }
     },
@@ -36,6 +69,7 @@ const Auth = {
         if (pass.length < 6) return UI.showToast("Пароль от 6 символов");
         try {
             await auth.createUserWithEmailAndPassword(email, pass);
+            // При регистрации сразу можно обновить имя, если нужно
             UI.showToast("Регистрация успешна!");
         } catch (e) {
             this.handleAuthError(e);
@@ -43,15 +77,16 @@ const Auth = {
     },
 
     handleAuthError(e) {
-        console.error("Auth System Error:", e.code);
+        console.error("Auth System Error:", e.code, e.message);
         const errorMessages = {
-            'auth/account-exists-with-different-credential': "Этот Email уже привязан к другому способу входа",
-            'auth/email-already-in-use': "Эта почта уже занята, попробуйте войти",
+            'auth/account-exists-with-different-credential': "Требуется подтверждение паролем для связывания",
+            'auth/email-already-in-use': "Эта почта уже занята",
             'auth/wrong-password': "Неверный пароль",
             'auth/user-not-found': "Пользователь не найден",
             'auth/popup-closed-by-user': "Окно входа было закрыто",
             'auth/invalid-email': "Некорректный формат почты",
-            'auth/network-request-failed': "Проблема с интернетом"
+            'auth/network-request-failed': "Проблема с интернетом",
+            'auth/credential-already-in-use': "Этот Google аккаунт уже привязан к другому пользователю"
         };
         UI.showToast(errorMessages[e.code] || `Ошибка: ${e.code}`);
     },
@@ -72,7 +107,7 @@ const Auth = {
             provider.setCustomParameters({ prompt: 'select_account' });
             await auth.signInWithPopup(provider);
         } catch (e) {
-            window.location.reload();
+            window.location.reload(); // Перезагрузка при ошибке
         }
     },
 
@@ -81,6 +116,7 @@ const Auth = {
     }
 };
 
+// Слушатель состояния (без изменений)
 auth.onAuthStateChanged(user => {
     const loginScreen = document.getElementById('login-screen');
     const appScreen = document.getElementById('app');
